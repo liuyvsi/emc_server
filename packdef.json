@@ -1,0 +1,28 @@
+
+{
+    "local_ip":"172.17.0.3",
+    "local_port":12345,
+    "dest_ip" : "172.17.0.2",
+    "dest_port":12345,
+    "package":[
+      {
+        "head":"##",
+        "max_length": 2
+      },
+      {
+        "length":"0255",
+        "max_length": 4
+      },
+      {
+        "content":"",
+        "max_length":975
+      },
+      {
+        "crc":"",
+        "max_length":4
+      },
+      {
+        "tail":"\n\t",
+        "max_length":2
+      }]
+    } 
