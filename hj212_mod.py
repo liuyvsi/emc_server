@@ -1,8 +1,7 @@
-# copied from hj212_mod.py
-# copied from segtes1.py 
 # filename： hj212_mod.py
 
 import json
+import socket
 
 
 class NetworkProtocol:
@@ -46,6 +45,7 @@ class NetworkProtocol:
             elif "crc" in section:
                 unpacked["crc"] = packed_data[index:index + section["max_length"]]
                 crc_value = self.generate_crc(unpacked["content"])
+            
                 if unpacked["crc"] != crc_value:
                     raise ValueError("CRC check failed! Data may be corrupted.")
             elif "tail" in section:
@@ -108,8 +108,6 @@ class JSONSegmenter:
     @staticmethod
     def concatenate_segments(segmented_json):
         # Sort segments based on 'PNO' value
-        
-        print(segmented_json) #debug
         sorted_segments = sorted(segmented_json, key=lambda x: int(x["PNO"]))
         concatenated_cp = ""
 
@@ -118,3 +116,89 @@ class JSONSegmenter:
 
         return concatenated_cp
 
+class JSONByteConverter:
+    @staticmethod
+    def json_to_bytes(data):
+        byte_string = ';'.join([f"{key}={value}" for key, value in data.items()]) + ';'
+#        return byte_string.encode('utf-8')
+        return byte_string
+
+    @staticmethod
+    def bytes_to_json(byte_string):
+        json_data = {}
+        if byte_string.endswith(';'):
+            byte_string = byte_string[:-1]
+
+        # 查找CP=&&...&&这一段
+        cp_start_index = byte_string.find('CP=')
+        cp_end_index = byte_string.find('&&', cp_start_index + 4)
+        if cp_start_index == -1 or cp_end_index == -1:
+            return {}
+
+        # 取出CP=&&...&&这一段
+        cp_value = byte_string[cp_start_index:cp_end_index + 2]
+
+        # 去除CP=&&...&&这一段
+        byte_string = byte_string[:cp_start_index] #+ byte_string[cp_end_index + 2:]
+
+  
+        # 处理CP
+        value = cp_value[5:-2]
+    #    value = value.replace('=', '')
+    #    value = value.replace(';', '')
+        json_data['CP'] = value
+
+        # 处理其他key
+        if byte_string.endswith(';'):
+            byte_string = byte_string[:-1]
+        items = byte_string.split(';')
+        
+        for item in items:
+        
+            key, value = item.split('=')
+
+            json_data[key] = value
+
+        return json_data
+
+class DataProcessor:
+    def __init__(self, config_file):
+        self.config = self.read_config(config_file)
+        self.segmenter = JSONSegmenter(self.config['ST'], self.config['CN'],
+                                                self.config['PW'], self.config['MN'])
+        self.network_protocol = NetworkProtocol(read_protocol_from_file('packdef.json'))
+
+    @staticmethod
+    def read_config(file_name):
+        with open(file_name, 'r') as file:
+            return json.load(file)
+
+    def send_data(self, content):
+        segmented_data = self.segmenter.segment_data(content)
+
+        for segment in segmented_data:
+            packed_data = self.network_protocol.pack(segment)
+            self._send_udp(packed_data, self.config['destin_ip'], self.config['destin_port'])
+
+    def receive_data(self):
+        udp_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp_server.bind((self.config['local_ip'], self.config['local_port']))
+
+        received_segments = []
+        while True:
+            data, _ = udp_server.recvfrom(1200)  # Change the buffer size if needed
+            unpacked_data = self.network_protocol.unpack(data.decode('utf-8'))
+            segment_data = JSONByteConverter.bytes_to_json(unpacked_data)
+            received_segments.append(segment_data)
+
+            if len(received_segments) == int(received_segments[0]['PNUM']):
+                break
+
+        concatenated_data = self.segmenter.concatenate_segments(received_segments)
+        return concatenated_data
+
+    @staticmethod
+    def _send_udp(data, destin_ip, destin_port):
+        udp_client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp_client.sendto(data.encode('utf-8'), (destin_ip, destin_port))
+        udp_client.close()
