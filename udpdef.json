@@ -1,0 +1,10 @@
+{
+    "ST":"svST",
+    "CN":"svCN",
+    "PW":"YourPW",
+    "MN":"svMN",
+    "local_ip": "0.0.0.0",
+    "local_port": 12345,
+    "destin_ip": "172.17.0.3",
+    "destin_port": 12345
+}
