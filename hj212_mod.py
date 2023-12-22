@@ -2,6 +2,7 @@
 
 import json
 import socket
+import threading
 
 
 class NetworkProtocol:
@@ -196,6 +197,18 @@ class DataProcessor:
 
         concatenated_data = self.segmenter.concatenate_segments(received_segments)
         return concatenated_data
+    
+    def run_receiver(self, data_queue):
+        # Define a method to run as a thread
+        def receive_and_enqueue():
+            while True:
+                concatenated_data = self.receive_data()
+                data_queue.put(concatenated_data)
+
+        # Create a thread to run the receive_and_enqueue method
+        receiver_thread = threading.Thread(target=receive_and_enqueue)
+        receiver_thread.daemon = True  # Set the thread as daemon to exit when the main program exits
+        receiver_thread.start()
 
     @staticmethod
     def _send_udp(data, destin_ip, destin_port):
